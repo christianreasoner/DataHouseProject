@@ -1,19 +1,36 @@
 import java.io.FileReader;
 import java.io.IOException;
 import java.io.FileWriter;
+import java.text.DecimalFormat;
 import java.util.HashMap;
+import java.util.Scanner;
 import org.json.simple.JSONArray;
 import org.json.simple.JSONObject;
 import org.json.simple.parser.JSONParser;
-import org.json.simple.parser.ParseException;
 
 public class JsonParser {
     public static void main(String[] args) {
         try {
             // Create JSONParser instance to parse JSON file
             JSONParser parser = new JSONParser();
-            // Read JSON file and parse into JSONObject
-            JSONObject jsonObject = (JSONObject) parser.parse(new FileReader("input.json"));
+            // Create Scanner to obtain filename
+            Scanner scan = new Scanner(System.in);
+            String fileName;
+            boolean fileOpened = false;
+            JSONObject jsonObject = null;
+
+            // Ask user for a valid filename. Read JSON file and parse into JSONObject
+            while (!fileOpened) {
+                try {
+                    System.out.print("Enter file name: ");
+                    fileName = scan.nextLine();
+                    jsonObject = (JSONObject) parser.parse(new FileReader(fileName));
+                    fileOpened = true;
+                } catch (IOException e) {
+                    System.out.println("Error, enter a valid filename.");
+                }
+            }
+
             // Extract values associated with key "applicants"
             JSONArray applicantsArray = (JSONArray) jsonObject.get("applicants");
             // Extract values associated with key "team"
@@ -22,12 +39,17 @@ public class JsonParser {
             JSONObject JSONOutput = new JSONObject();
             // Create jsonArray that holds the individual objects for the names and compatibility scores
             JSONArray jsonArray = new JSONArray();
-            double attributesScore = 0;
+            // Initialize variables
+            double compatibilityScore = 0;
             double numAtt = 0;
+            double[] attrArray;
+            double applicantScore;
+            double teamAvgScore;
+            DecimalFormat df = new DecimalFormat("#.##");
             // HashMap that maps attribute names to the average score from the team members
             // Keys: attribute names
             // Values: an array that contains attribute value at index 0 and the amount of occurrences of the attribute at index 1 (used to calculate average)
-            HashMap<String, double[]> teamAverages = new HashMap<String, double[]>();
+            HashMap<String, double[]> teamAverages = new HashMap<>();
 
             // Iterate over team members
             for (Object team : teamArray) {
@@ -40,7 +62,7 @@ public class JsonParser {
                     if (!teamAverages.containsKey(key)) {
                         teamAverages.put((String) key, new double[] {((Number) attributesObject.get(key)).doubleValue(), 1});
                     } else {
-                        double[] attrArray = teamAverages.get(key);
+                        attrArray = teamAverages.get(key);
                         attrArray[0] = attrArray[0] + ((Number) attributesObject.get(key)).doubleValue();
                         attrArray[1]++;
                         teamAverages.put((String) key, attrArray);
@@ -50,7 +72,7 @@ public class JsonParser {
 
             // Iterate over hashmap and compute the average
             for (String key : teamAverages.keySet()) {
-                double[] attrArray = teamAverages.get(key);
+                attrArray = teamAverages.get(key);
                 attrArray[0] = attrArray[0]/attrArray[1];
                 teamAverages.put(key, attrArray);
             }
@@ -59,27 +81,34 @@ public class JsonParser {
             for (Object applicant : applicantsArray) {
                 JSONObject applicantObject = (JSONObject) applicant;
                 JSONObject attributesObject = (JSONObject) applicantObject.get("attributes");
+
                 // Iterate over each applicants attribute and determine a compatibility score
                 for (Object key : attributesObject.keySet()) {
-                    double applicantScore = ((Number) attributesObject.get(key)).doubleValue();
-                    double teamAvgScore = teamAverages.get(key)[0];
-                    attributesScore += .5*(applicantScore/teamAvgScore);
+                    applicantScore = ((Number) attributesObject.get(key)).doubleValue();
+                    teamAvgScore = teamAverages.get(key)[0];
+                    compatibilityScore += .5*(applicantScore/teamAvgScore);
                     numAtt++;
                 }
-                // Average the compatibility score
-                attributesScore /= numAtt;
+
+                // Average the compatibility score, if score > 1 set score = 1
+                compatibilityScore /= numAtt;
+                if (compatibilityScore > 1) {
+                    compatibilityScore = 1;
+                }
                 // Create a JSONObject that has the applicant name and final compatibility score
                 JSONObject postScored = new JSONObject();
                 postScored.put("name",applicantObject.get("name"));
-                postScored.put("score",attributesScore);
-                // Adds each JSON object to an array and resets counters
+                postScored.put("score",df.format(compatibilityScore));
+                // Add each JSON object to an array and resets counters
                 jsonArray.add(postScored);
-                attributesScore = 0;
+                compatibilityScore = 0;
                 numAtt = 0;
             }
-            // Maps the finished array to scoredApplicants
+
+            // Map the finished array to scoredApplicants
             JSONOutput.put("scoredApplicants", jsonArray);
 
+            // Create output file with JSON solution
             try (FileWriter file = new FileWriter("output.json")) {
                 file.write(JSONOutput.toJSONString());
                 file.flush();
@@ -87,7 +116,7 @@ public class JsonParser {
                 e.printStackTrace();
             }
 
-        } catch (IOException | ParseException e) {
+        } catch (Exception e) {
             e.printStackTrace();
         }
     }
